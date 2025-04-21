@@ -32,9 +32,8 @@ def extract_media_info(url):
                 "platform": info.get("extractor_key", "Unknown")
             }
     except Exception as e:
-    logging.error(f"Error extracting media: {e}")
-    await update.message.reply_text("Failed to extract link. Make sure it's a public YouTube, Instagram, FB, or TikTok URL.")
-
+        logging.error(f"[yt_dlp error] {e}")
+        raise
 def build_menu():
     return InlineKeyboardMarkup([
         [InlineKeyboardButton("Extract Again", callback_data="extract_again"),
@@ -58,8 +57,8 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         caption = f"*Platform:* {data['platform']}\\n*Title:* {data['title']}\\n*Duration:* {data['duration']}"
         await update.message.reply_photo(photo=data["thumbnail"], caption=caption, parse_mode="Markdown")
     except Exception as e:
-        await update.message.reply_text("Failed to extract link.")
-        logging.error(e)
+    logging.error(f"Error extracting media: {e}")
+    await update.message.reply_text("Failed to extract link. Make sure it's a public YouTube, Instagram, FB, or TikTok URL.")
 
 async def handle_buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
     q = update.callback_query
