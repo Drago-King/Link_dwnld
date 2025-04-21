@@ -1,131 +1,71 @@
-import logging
+import os
 import yt_dlp
 from telegram import Update, InlineKeyboardMarkup, InlineKeyboardButton
 from telegram.ext import (
-    ApplicationBuilder,
-    CommandHandler,
-    MessageHandler,
-    CallbackQueryHandler,
-    ContextTypes,
-    filters
+    ApplicationBuilder, CommandHandler, MessageHandler,
+    CallbackQueryHandler, ContextTypes, filters
 )
 
-# Logging setup
-logging.basicConfig(
-    format="%(asctime)s - %(levelname)s - %(message)s",
-    level=logging.INFO
-)
-logger = logging.getLogger(__name__)
+import logging
+logging.basicConfig(level=logging.INFO)
 
-# Supported platforms
+# Load token from env
+TOKEN = os.getenv("BOT_TOKEN")
+
 SUPPORTED_SERVICES = ["youtube", "facebook", "instagram", "tiktok"]
 
-# Multilingual messages
-LANG = {
-    "en": {
-        "welcome": "Welcome to the *Cinematic Link Whisperer*.\nSend a media link from YouTube, Facebook, Instagram, TikTok...",
-        "invalid": "That doesn't look like a supported media link.",
-        "processing": "Analyzing your link in cinematic silence...",
-        "again": "Send another media link.",
-        "audio": "Fetching cinematic audio (coming soon).",
-        "cancel": "Operation cancelled.",
-        "failed": "Failed to extract details. Try a different link."
-    }
-}
-
-def t(lang_code, key):
-    return LANG.get(lang_code, LANG["en"]).get(key, "")
-
-def detect_lang(update: Update):
-    return update.effective_user.language_code or "en"
-
-# Inline buttons
-def build_main_menu(lang):
-    return InlineKeyboardMarkup([
-        [
-            InlineKeyboardButton("Extract Again", callback_data="extract_again"),
-            InlineKeyboardButton("Get Audio", callback_data="get_audio"),
-        ],
-        [InlineKeyboardButton("Cancel", callback_data="cancel")]
-    ])
-
-# Media info extractor using yt_dlp
 def extract_media_info(url):
-    ydl_opts = {
-        "quiet": True,
-        "skip_download": True,
-        "noplaylist": True,
-        "forcejson": True
-    }
+    ydl_opts = {"quiet": True, "skip_download": True, "noplaylist": True}
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
         info = ydl.extract_info(url, download=False)
         return {
             "title": info.get("title"),
             "duration": info.get("duration_string"),
             "thumbnail": info.get("thumbnail"),
-            "url": info.get("webpage_url"),
             "platform": info.get("extractor_key", "Unknown")
         }
 
-# /start command
+def build_menu():
+    return InlineKeyboardMarkup([
+        [InlineKeyboardButton("Extract Again", callback_data="extract_again"),
+         InlineKeyboardButton("Get Audio", callback_data="get_audio")],
+        [InlineKeyboardButton("Cancel", callback_data="cancel")]
+    ])
+
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    lang = detect_lang(update)
-    await update.message.reply_text(t(lang, "welcome"), parse_mode="Markdown")
+    await update.message.reply_text("Send a YouTube, Instagram, Facebook, or TikTok link!")
 
-# Message handler
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    lang = detect_lang(update)
-    text = update.message.text.strip()
-
-    if "http" not in text:
-        await update.message.reply_text(t(lang, "invalid"))
+    url = update.message.text.strip()
+    if "http" not in url:
+        await update.message.reply_text("That's not a valid link.")
         return
 
-    await update.message.reply_text(t(lang, "processing"), reply_markup=build_main_menu(lang))
+    await update.message.reply_text("Processing...", reply_markup=build_menu())
 
     try:
-        data = extract_media_info(text)
-        platform = data["platform"].lower()
-
-        if platform not in SUPPORTED_SERVICES:
-            await update.message.reply_text(f"{platform} is not yet supported.")
-            return
-
-        response = (
-            f"*Platform:* {platform.title()}\n"
-            f"*Title:* {data['title']}\n"
-            f"*Duration:* {data['duration']}\n"
-            f"[Thumbnail]({data['thumbnail']})"
-        )
-        await update.message.reply_photo(photo=data["thumbnail"], caption=response, parse_mode="Markdown")
-
+        data = extract_media_info(url)
+        caption = f"*Platform:* {data['platform']}\\n*Title:* {data['title']}\\n*Duration:* {data['duration']}"
+        await update.message.reply_photo(photo=data["thumbnail"], caption=caption, parse_mode="Markdown")
     except Exception as e:
-        logger.error(f"Extraction error: {e}")
-        await update.message.reply_text(t(lang, "failed"))
+        await update.message.reply_text("Failed to extract link.")
+        logging.error(e)
 
-# Callback buttons
 async def handle_buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    lang = detect_lang(update)
-    query = update.callback_query
-    await query.answer()
+    q = update.callback_query
+    await q.answer()
+    if q.data == "extract_again":
+        await q.edit_message_text("Send another link.")
+    elif q.data == "get_audio":
+        await q.edit_message_text("Coming soon.")
+    elif q.data == "cancel":
+        await q.edit_message_text("Cancelled.")
 
-    if query.data == "extract_again":
-        await query.edit_message_text(t(lang, "again"))
-    elif query.data == "get_audio":
-        await query.edit_message_text(t(lang, "audio"))
-    elif query.data == "cancel":
-        await query.edit_message_text(t(lang, "cancel"))
-    else:
-        await query.edit_message_text("Unknown action.")
-
-# Run the bot
 def main():
-    app = ApplicationBuilder().token("7518970885:AAFH6uxaE8gZUaK_zlkY3Z9nqDICD8Og8P0").build()
+    app = ApplicationBuilder().token(TOKEN).build()
     app.add_handler(CommandHandler("start", start))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
     app.add_handler(CallbackQueryHandler(handle_buttons))
-
-    logger.info("Bot is live. Accepting links...")
     app.run_polling()
 
 if __name__ == "__main__":
