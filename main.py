@@ -15,15 +15,25 @@ TOKEN = os.getenv("BOT_TOKEN")
 SUPPORTED_SERVICES = ["youtube", "facebook", "instagram", "tiktok"]
 
 def extract_media_info(url):
-    ydl_opts = {"quiet": True, "skip_download": True, "noplaylist": True}
-    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-        info = ydl.extract_info(url, download=False)
-        return {
-            "title": info.get("title"),
-            "duration": info.get("duration_string"),
-            "thumbnail": info.get("thumbnail"),
-            "platform": info.get("extractor_key", "Unknown")
+    try:
+        ydl_opts = {
+            "quiet": True,
+            "skip_download": True,
+            "noplaylist": True,
+            "forcejson": True,
+            "extract_flat": "in_playlist"
         }
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            info = ydl.extract_info(url, download=False)
+            return {
+                "title": info.get("title"),
+                "duration": info.get("duration_string", info.get("duration")),
+                "thumbnail": info.get("thumbnail"),
+                "platform": info.get("extractor_key", "Unknown")
+            }
+    except Exception as e:
+    logging.error(f"Error extracting media: {e}")
+    await update.message.reply_text("Failed to extract link. Make sure it's a public YouTube, Instagram, FB, or TikTok URL.")
 
 def build_menu():
     return InlineKeyboardMarkup([
